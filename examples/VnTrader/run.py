@@ -41,6 +41,8 @@ def main():
     
     # 添加交易接口
     me.addGateway(ctpGateway)
+    
+    '''
     me.addGateway(oandaGateway)
     me.addGateway(ibGateway)
     
@@ -49,15 +51,16 @@ def main():
         me.addGateway(xspeedGateway)
         me.addGateway(secGateway)
         me.addGateway(futuGateway)
+
         
     if system == 'Linux':
         me.addGateway(xtpGateway)
-        
+        '''    
     # 添加上层应用
     me.addApp(riskManager)
     me.addApp(ctaStrategy)
     me.addApp(spreadTrading)
-    
+
     # 创建主窗口
     mw = MainWindow(me, ee)
     mw.showMaximized()
