@@ -166,7 +166,7 @@ class CentralBaseSet:
                         else:
                             self.centralbase_list.append(Centralbase(start, end, cross_itval.upper_bound, cross_itval.lower_bound ))
                             seg_list=[]
-                            #pre_cross_itval = cross_itval
+                            pre_cross_itval = cross_itval
                             cross_itval = Interval.none()
                             start = None
                             end = None     
