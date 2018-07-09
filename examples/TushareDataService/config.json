@@ -1,8 +1,8 @@
 {
 	"MONGO_HOST": "localhost",
 	"MONGO_PORT": 27017,
-	"START":"2015-5-25",
-	"END":"2018-5-25",
-	"FREQ":["60MIN","D"],
-	"SYMBOLS": ["bu1806"]
+	"START":"2016-5-25",
+	"END":"2018-5-30",
+	"FREQ":["1MIN"],
+	"SYMBOLS": ["601333"]
 }

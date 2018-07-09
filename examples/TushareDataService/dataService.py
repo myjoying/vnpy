@@ -82,7 +82,8 @@ def downBarBySymbol(symbol, start_date=None, end_date=None, freq='D'):
     else:
         asset = 'E'
         
-    df = ts.bar(symbol, conn=ts.get_apis(), freq=freq, asset=asset)
+    df = ts.bar(symbol, conn=ts.get_apis(), freq=freq, asset=asset, start_date=start_date, end_date=end_date)
+    ts.get_hist_data()
     
     df = df.sort_index()
     
