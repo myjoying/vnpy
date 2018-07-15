@@ -3,7 +3,7 @@
 	"MONGO_PORT": 27017,
 	"START":"2015-5-25",
 	"END":"2018-5-25",
-	"FREQ":["5MIN", "30MIN", "D"],
+	"FREQ":["5MIN","30MIN","D"],
 	"FREQB":["5MIN"],
 	"SYMBOLS": ["601333"]
 }

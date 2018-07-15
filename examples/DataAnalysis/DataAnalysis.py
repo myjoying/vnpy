@@ -47,8 +47,8 @@ RELY_FRED_DICT ={
 'W':"D"
 }
 
-PICKLE_DATA=['1MIN', '5MIN','30MIN']
-
+PICKLE_DATA=['1MIN', '5MIN']
+#PICKLE_DATA=[]
 def dataToFile(data, filename='file'):
     #保存到CSV
     data.to_csv(filename + '.csv', index = True, header=True)
