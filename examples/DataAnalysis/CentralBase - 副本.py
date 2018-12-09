@@ -33,13 +33,6 @@ M_NODECIDE = 0
 M_FALSE = -1
 M_TRUE = 1
 
-#交易方向
-M_BUY = 1
-M_SELL = -1 
-
-#最高使用次节点生成背驰的级别的祖父级别
-GRANDPA_CB_LEVER=[]
-
 
 class Node:
     """ 
@@ -99,13 +92,12 @@ class BeichiTime:
     btype:背驰类型和中枢层级，正数为顶背驰 负数为底背驰
     real_beichi:是否为真背驰, M_NODECIDE为未判定，M_FALSE否 M_TRUE是
     '''
-    def __init__(self, time, btype, node_id, real_time=None, low_cb_id=None):
+    def __init__(self, time, btype, node_id, real_time=None):
         self.time = time
         self.btype = btype
         self.node_id = node_id
         self.real_beichi = M_NODECIDE
         self.real_time = real_time
-        self.low_cb_id = low_cb_id
 
 class BuyPoint:
     def __init__(self, time, node_id,real_time = None):
@@ -120,20 +112,6 @@ class SellPoint:
         self.real_time = real_time
         self.node_id = node_id
         self.real_sell = M_NODECIDE
-        
-class TradePoint:
-    def __init__(self, time, node_id,low_cb_id=None, real_time = None, trade_direct=M_BUY):
-        self.time = time
-        self.real_time = real_time
-        self.node_id = node_id
-        self.trade_direct = trade_direct
-        self.real_sell = M_NODECIDE
-        self.low_cb_id = low_cb_id
-        
-class TradeStrategy:
-    def __init__(self):
-        self.trade_point_list = []
-        self.trade_on_going = False
  
 class KData:
     def __init__(self):
@@ -159,8 +137,6 @@ class CentralBaseSet:
         self.centralbase_list = []
         self.freq = freq
         self.beichi_list=[]
-        self.beichi_pc_list=[]
-        self.share_beichi_list=[]
         self.first_sell_point_list = []
         self.sec_sell_point_list = []
         self.all_sell_point_list = []
@@ -180,10 +156,6 @@ class CentralBaseSet:
         self.cur_min_node_id = 0
         self.cur_max_value = M_MIN_VAL
         self.cur_max_node_id = 0
-        
-        #交易策略列表
-        self.trade_strategy_list = []
-        
         
         #中枢升级逻辑
         self.cur_cut_low_id = -1
@@ -205,28 +177,12 @@ class CentralBaseSet:
         if self.low_CB_set == None:
             self.getNodeList_KLine_Step()
         else:
-            self.getNodeList_Lower_Step()
-            
-        if self.freq=='D' :
-            if len(self.node_list)>2 and abs(self.node_list[-2].value-4.71)<0.001:
-                a=1             
+            self.getNodeList_Lower_Step()   
 
         self.get_Centralbase_Step()
-        
-        self.getBeichi_Share_With_LowBeichi_Step()
-        
-        if self.low_CB_set == None or True:
-            self.beichi_processing = self.getBeichi_LastTwo_Step()
-        else:
-            self.beichi_processing = self.getBeichi_LastOne_Step()        
-        
-        self.update_max_min_value()
-        
+        self.beichi_processing = self.getBeichi_LastTwo_Step()
         self.beichi_judge_step()
-        #self.sell_point_judge()
-        #self.SnakeTrade_step()
-        if self.freq=='D':
-            self.SnakeTrade_With_ShareBeichi_step()
+        self.sell_point_judge()
 
     
     def update_data(self, low_data_frame=None, data_item_series=None):
@@ -290,8 +246,6 @@ class CentralBaseSet:
         self.data['base_up'] = None
         self.data['base_down'] = None
         self.data['beichi'] = None
-        self.data['sharebeichi'] = None
-        self.data['panzhbeichi'] = None
         self.data['sec_buy'] = None
         for node in self.node_list:
             time_seg = self.data.ix[self.data.index>=node.datetime, 'close']
@@ -308,18 +262,6 @@ class CentralBaseSet:
             time = time_seg.index[0]
             if time!=None:
                 self.data.set_value(time, 'beichi', self.data.ix[time, 'close'])
-                
-        for sharebeichi in self.share_beichi_list:
-            time_seg = self.data.ix[self.data.index>=sharebeichi.time, 'close']
-            time = time_seg.index[0]
-            if time!=None:
-                self.data.set_value(time, 'sharebeichi', self.data.ix[time, 'close']) 
-                
-        for panzhbeichi in self.beichi_pc_list:
-            time_seg = self.data.ix[self.data.index>=panzhbeichi.time, 'close']
-            time = time_seg.index[0]
-            if time!=None:
-                self.data.set_value(time, 'panzhbeichi', self.data.ix[time, 'close'])        
                 
         for sec_buy in self.sec_buy_point_list:
             time_seg = self.data.ix[self.data.index>=sec_buy.time, 'close']
@@ -487,9 +429,6 @@ class CentralBaseSet:
                     self.centralbase_list[-1].end_node_id = end_node_id+1
                     self.centralbase_list[-1].end = self.node_list[end_node_id+1].datetime
                     #self.centralbase_list[-1].setCType(self.__getCBType(newcbase=None, isnew=False, cb_id=len(self.centralbase_list)-1))
-                    
-                    self.get_panzheng_beichi_step()
-                    
                     #更新极值信息
                     if self.node_list[end_node_id+1].value > self.centralbase_list[-1].max_val:
                         self.centralbase_list[-1].max_val = self.node_list[end_node_id+1].value
@@ -575,18 +514,14 @@ class CentralBaseSet:
             cur_base_start_node_id = cur_base_start_node_id+3
             
             #进行中枢计算
-            self.get_Centralbase_Step() 
-            self.update_max_min_value()
+            self.get_Centralbase_Step()             
             
             self.seek_max=self.__reverse_direct(self.seek_max)
             self.__Make_New_Temp_Node_Lower_WithID(self.seek_max, cur_base_start_node_id, cur_base_start_node_id+3, index)
             cur_base_start_node_id = cur_base_start_node_id+3
             self.cur_cut_start_node_id = cur_base_start_node_id
             return
-        '''    
-        if self.node_list[-1].isformal == M_FORMAL and (base.start<=self.node_list[-1].datetime and base.end>=self.node_list[-1].datetime):
-            return
-        
+            '''      
         if self.seek_max==M_TO_UP: #向上
             #当前中枢在前一中枢下或相交，当前趋势结束
             if((0<self.__get_CB_pos(pre_base, base)) and (index>self.node_list[-1].low_id)):
@@ -599,14 +534,7 @@ class CentralBaseSet:
                 self.__Make_New_Temp_Node_Lower_WithID(self.seek_max, cur_base_start_node_id, base.end_node_id, index)
                 
             else:#趋势延续
-                low_node_time, low_node_value = self.__share_same_beichi_with_low_judge()
-                if low_node_time!=None and low_node_value!=None and False:
-                    self.node_list[-1].isformal = M_FORMAL
-                    self.node_list[-1].datetime = low_node_time
-                    self.node_list[-1].value = low_node_value
-                    self.node_list[-1].low_id = index
-                else:
-                    self.__Update_Last_Node_Lower_WithID(self.seek_max, cur_base_start_node_id, base.end_node_id, isformal=M_TEMP,low_id=index)                        
+                self.__Update_Last_Node_Lower_WithID(self.seek_max, cur_base_start_node_id, base.end_node_id, low_id=index)                        
         else:
             #当前中枢在前一中枢上或相交，当前趋势结束
             if((0>self.__get_CB_pos(pre_base, base)) and (index>self.node_list[-1].low_id)):
@@ -619,14 +547,7 @@ class CentralBaseSet:
                 self.__Make_New_Temp_Node_Lower_WithID(self.seek_max, cur_base_start_node_id, base.end_node_id, index)
                 
             else:#趋势延续
-                low_node_time, low_node_value = self.__share_same_beichi_with_low_judge()
-                if low_node_time!=None and low_node_value!=None and False:
-                    self.node_list[-1].isformal = M_FORMAL
-                    self.node_list[-1].datetime = low_node_time
-                    self.node_list[-1].value = low_node_value
-                    self.node_list[-1].low_id = index
-                else:
-                    self.__Update_Last_Node_Lower_WithID(self.seek_max, cur_base_start_node_id, base.end_node_id, isformal=M_TEMP,low_id=index)    
+                self.__Update_Last_Node_Lower_WithID(self.seek_max, cur_base_start_node_id, base.end_node_id, low_id=index) 
                      
 
     def __Make_New_Temp_Node_Lower(self, seek_max, start_time, end_time, low_id=None):
@@ -637,15 +558,13 @@ class CentralBaseSet:
         lower_data = self.low_CB_set.data
         if seek_max==M_TO_UP:
             time,value = self.__getMaxIndex_Val(lower_data, start_time, end_time)
-            top_bottom = M_TOP
         else:
             time,value = self.__getMinIndex_Val(lower_data, start_time, end_time)
-            top_bottom = M_BOTTOM
         if time==None:
             time_seg = self.data.ix[self.data.index>end_time, 'close']
             time = time_seg.index[0]
             value = self.data.ix[0, 'close']                    
-        self.node_list.append(Node(time, value, top_bottom, low_id=low_id, isformal=M_TEMP))
+        self.node_list.append(Node(time, value, M_TOP, low_id=low_id, isformal=M_TEMP))
       
       
     def __Make_New_Temp_Node_Lower_WithID(self, seek_max, start_node_id, end_node_id, low_id=None):
@@ -656,12 +575,10 @@ class CentralBaseSet:
         lower_node_list = self.low_CB_set.node_list
         if seek_max==M_TO_UP:
             node_id,value = self.__getMaxLowerNode_Val( start_node_id, end_node_id)
-            top_bottom = M_TOP
         else:
             node_id,value = self.__getMinLowerNode_Val( start_node_id, end_node_id)
-            top_bottom = M_BOTTOM
                    
-        self.node_list.append(Node(lower_node_list[node_id].datetime, value, top_bottom, low_id=low_id, isformal=M_TEMP))
+        self.node_list.append(Node(lower_node_list[node_id].datetime, value, M_TOP, low_id=low_id, isformal=M_TEMP))
         
     def __Update_Last_Node_Lower(self, seek_max, start_time, end_time, isformal=None, low_id = None) :
         '''
@@ -762,33 +679,6 @@ class CentralBaseSet:
                             self.first_sell_point_list.append(SellPoint(low_node_list[-2].datetime, len(self.node_list)-1,\
                                                                real_time=self.__get_lowest_current_time("5MIN")))                                                                         
     
-    def update_max_min_value(self):
-        '''
-        根据正式节点的值更新最大和最小值
-        '''
-        if(len(self.centralbase_list)<2):
-            return
-    
-        pre_base = self.centralbase_list[-2]
-        base = self.centralbase_list[-1]
-    
-        if (self.cur_min_node_id == len(self.node_list)-2) \
-               or (self.cur_max_node_id == len(self.node_list)-2):
-            return
-    
-    
-        if base.ctype==0 or pre_base.ctype*base.ctype<0:
-            self.cur_max_node_id,self.cur_max_value = self.__getMaxNode_Val(base.start_node_id, base.end_node_id)
-            self.cur_min_node_id,self.cur_min_value = self.__getMinNode_Val(base.start_node_id, base.end_node_id)
-        else:
-            if self.node_list[-2].value <= self.cur_min_value:#创新低
-                self.cur_min_node_id = len(self.node_list)-2
-                self.cur_min_value = self.node_list[-2].value
-                
-            if self.node_list[-2].value >= self.cur_max_value:#创新高
-                self.cur_max_node_id = len(self.node_list)-2
-                self.cur_max_value = self.node_list[-2].value                
-                
     def getBeichi_LastTwo_Step(self):
         '''
         分步获取背驰节点
@@ -800,165 +690,183 @@ class CentralBaseSet:
         if(len(self.centralbase_list)<2):
             return False
         
-        if len(self.beichi_list)>0 and self.beichi_list[-1].time == self.node_list[-2].datetime:
-            return False
-        
         pre_base = self.centralbase_list[-2]
         base = self.centralbase_list[-1]
-
-        cur_macd = 0
-        pre_macd = 0
-        cur_macd_lower = 0
-        pre_macd_lower = 0        
-        if(base.ctype<=-2):
-            if self.node_list[-2].value < self.cur_min_value:#创新低
-                pre_macd = self.__getMACD_Sum(self.node_list[self.cur_min_node_id-1].datetime, self.node_list[self.cur_min_node_id ].datetime, seekMax=False)
-                cur_macd = self.__getMACD_Sum(self.node_list[-3].datetime, self.node_list[-2].datetime, seekMax=False)
-                pre_macd_lower = self.__getMACD_Sum_Lower(self.node_list[self.cur_min_node_id-1].datetime, self.node_list[self.cur_min_node_id ].datetime, seekMax=False)
-                cur_macd_lower = self.__getMACD_Sum_Lower(self.node_list[-3].datetime, self.node_list[-2].datetime, seekMax=False)                
-                if abs(cur_macd) < abs(pre_macd) or  abs(cur_macd_lower) < abs(pre_macd_lower) :
-                    if self.freq=="D":
-                        a=1
-                    self.beichi_list.append(BeichiTime(self.node_list[-2].datetime,base.ctype, len(self.node_list)-2,\
-                                                       real_time=self.__get_lowest_current_time("5MIN")))
-                    self.first_buy_point_list.append(BuyPoint(self.node_list[-2].datetime,len(self.node_list)-2,\
-                                                       real_time=self.__get_lowest_current_time("5MIN")))                            
-                    return True                        
-        elif (base.ctype>=2):
-            if self.node_list[-2].value > self.cur_max_value:#创新高
-                pre_macd = self.__getMACD_Sum(self.node_list[self.cur_max_node_id-1].datetime, self.node_list[self.cur_max_node_id].datetime, seekMax=True)
-                cur_macd = self.__getMACD_Sum(self.node_list[-3].datetime, self.node_list[-2].datetime, seekMax=True)
-                pre_macd_lower = self.__getMACD_Sum_Lower(self.node_list[self.cur_max_node_id-1].datetime, self.node_list[self.cur_max_node_id].datetime, seekMax=True)
-                cur_macd_lower = self.__getMACD_Sum_Lower(self.node_list[-3].datetime, self.node_list[-2].datetime, seekMax=True)                  
-                if abs(cur_macd) < abs(pre_macd) or  abs(cur_macd_lower) < abs(pre_macd_lower) :
-                    self.beichi_list.append(BeichiTime(self.node_list[-2].datetime,base.ctype, len(self.node_list)-2,\
-                                                       real_time=self.__get_lowest_current_time("5MIN")))
-                    self.first_sell_point_list.append(SellPoint(self.node_list[-2].datetime,  len(self.node_list)-2,\
-                                                       real_time=self.__get_lowest_current_time("5MIN")))                             
-                    return True                         
-        else:
+        
+        if (self.cur_min_node_id == len(self.node_list)-2) \
+           or (self.cur_max_node_id == len(self.node_list)-2):
             return self.beichi_processing
-                
     
+        
+        if base.ctype==0 or pre_base.ctype*base.ctype<0:
+            self.cur_max_node_id = base.max_node_id
+            self.cur_max_value = base.max_val
+            self.cur_min_node_id = base.min_node_id
+            self.cur_min_value = base.min_val
+        else:
+            if (self.low_CB_set==None):
+                cur_macd = 0
+                pre_macd = 0
+                base = self.centralbase_list[-1]
+                if(base.ctype<=-2):
+                    if self.node_list[-2].value <= self.cur_min_value:#创新低
+                        pre_macd = self.__getMACD_Sum(self.node_list[self.cur_min_node_id-1].datetime, self.node_list[self.cur_min_node_id ].datetime, seekMax=False)
+                        cur_macd = self.__getMACD_Sum(self.node_list[-3].datetime, self.node_list[-2].datetime, seekMax=False)
+                        self.cur_min_node_id = len(self.node_list)-2
+                        self.cur_min_value = self.node_list[-2].value
+                        if abs(cur_macd) < abs(pre_macd):
+                            self.beichi_list.append(BeichiTime(self.node_list[-2].datetime,base.ctype, len(self.node_list)-2,\
+                                                               real_time=self.__get_lowest_current_time("5MIN")))
+                            self.first_buy_point_list.append(BuyPoint(self.node_list[-2].datetime,len(self.node_list)-2,\
+                                                               real_time=self.__get_lowest_current_time("5MIN")))                            
+                            return True                        
+                elif (base.ctype>=2):
+                    if self.node_list[-2].value >= self.cur_max_value:#创新高
+                        pre_macd = self.__getMACD_Sum(self.node_list[self.cur_max_node_id-1].datetime, self.node_list[self.cur_max_node_id].datetime, seekMax=True)
+                        cur_macd = self.__getMACD_Sum(self.node_list[-3].datetime, self.node_list[-2].datetime, seekMax=True)
+                        self.cur_max_node_id = len(self.node_list)-2
+                        self.cur_max_value = self.node_list[-2].value 
+                        if abs(cur_macd) < abs(pre_macd):
+                            self.beichi_list.append(BeichiTime(self.node_list[-2].datetime,base.ctype, len(self.node_list)-2,\
+                                                               real_time=self.__get_lowest_current_time("5MIN")))
+                            self.first_sell_point_list.append(SellPoint(self.node_list[-2].datetime,  len(self.node_list)-2,\
+                                                               real_time=self.__get_lowest_current_time("5MIN")))                             
+                            return True                         
+                else:
+                    return self.beichi_processing
+                
+            else:
+                cur_macd = 0
+                pre_macd = 0
+                base = self.centralbase_list[-1]
+                if(base.ctype<=-2):
+                    if self.node_list[-2].value <= self.cur_min_value:#创新低
+                        pre_macd = self.__getMACD_Sum(self.node_list[self.cur_min_node_id-1].datetime, self.node_list[self.cur_min_node_id].datetime, seekMax=False)
+                        cur_macd = self.__getMACD_Sum(self.node_list[-3].datetime, self.node_list[-2].datetime, seekMax=False)
+                        
+                        pre_vol = self.__getVolumn_Sum(self.node_list[self.cur_min_node_id-1].datetime, self.node_list[self.cur_min_node_id].datetime, seekMax=False)
+                        cur_vol = self.__getVolumn_Sum(self.node_list[-3].datetime, self.node_list[-2].datetime, seekMax=False)
+                        
+                        self.cur_min_node_id = len(self.node_list)-2
+                        self.cur_min_value = self.node_list[-2].value                         
+                        #if (abs(cur_macd) < abs(pre_macd)) or (abs(cur_vol)<abs(pre_vol)):
+                            #self.beichi_list.append(BeichiTime(self.node_list[-2].datetime, base.ctype,  len(self.node_list)-2,\
+                                                       #real_time=self.__get_lowest_current_time("5MIN")))
+                            #self.first_buy_point_list.append(BuyPoint(self.node_list[-2].datetime, len(self.node_list)-2,\
+                                                               #real_time=self.__get_lowest_current_time("5MIN")))                            
+                            #return True                     
+                elif (base.ctype>=2):
+                    if self.node_list[-2].value >= self.cur_max_value:#创新高
+                        pre_macd = self.__getMACD_Sum(self.node_list[self.cur_max_node_id-1].datetime, self.node_list[self.cur_max_node_id].datetime, seekMax=True)
+                        cur_macd = self.__getMACD_Sum(self.node_list[-3].datetime, self.node_list[-2].datetime, seekMax=True)
+                        self.cur_max_node_id = len(self.node_list)-2
+                        self.cur_max_value = self.node_list[-2].value                        
+                        #if abs(cur_macd) < abs(pre_macd):
+                            #self.beichi_list.append(BeichiTime(self.node_list[-2].datetime, base.ctype,  len(self.node_list)-2,\
+                                                       #real_time=self.__get_lowest_current_time("5MIN")))
+                            #self.first_sell_point_list.append(SellPoint(self.node_list[-2].datetime, len(self.node_list)-2,\
+                                                               #real_time=self.__get_lowest_current_time("5MIN")))                                                     
+                            #return True                       
+                else:
+                    return self.beichi_processing
                     
         return self.beichi_processing    
     
-
-    def get_panzheng_beichi_step(self):
-        '''
-        盘整背驰
-        '''
-        if(len(self.centralbase_list)<=1) or len(self.node_list)<1:
-            return False 
-        
-        base = self.centralbase_list[-1]
-        start_node_id = base.start_node_id
-        end_node_id = base.end_node_id
-        
-        if len(self.beichi_pc_list)>0 and self.node_list[end_node_id].datetime ==self.beichi_pc_list[-1].time:
-            return False
-        
-        if end_node_id-start_node_id >=2:
-            if self.node_list[end_node_id].value<base.min_val:#创新低
-                min_node_id = base.min_node_id
-                pre_macd = self.__getMACD_Sum(self.node_list[min_node_id-1].datetime, self.node_list[min_node_id].datetime, seekMax=False)
-                cur_macd = self.__getMACD_Sum(self.node_list[end_node_id-1].datetime, self.node_list[end_node_id].datetime, seekMax=False)
-                pre_macd_lower = self.__getMACD_Sum_Lower(self.node_list[min_node_id-1].datetime, self.node_list[min_node_id].datetime, seekMax=False)
-                cur_macd_lower = self.__getMACD_Sum_Lower(self.node_list[end_node_id-1].datetime, self.node_list[end_node_id].datetime, seekMax=False)               
-                if abs(cur_macd) < abs(pre_macd) or  abs(cur_macd_lower) < abs(pre_macd_lower) :
-
-                    self.beichi_pc_list.append(BeichiTime(self.node_list[end_node_id].datetime,-2, end_node_id,\
-                                                       real_time=self.__get_lowest_current_time("5MIN")))
-                          
-                    return True
-            elif self.node_list[end_node_id].value>base.max_val:#创新高
-                max_node_id = base.max_node_id
-                pre_macd = self.__getMACD_Sum(self.node_list[max_node_id-1].datetime, self.node_list[max_node_id].datetime, seekMax=True)
-                cur_macd = self.__getMACD_Sum(self.node_list[end_node_id-1].datetime, self.node_list[end_node_id].datetime, seekMax=True)
-                pre_macd_lower = self.__getMACD_Sum_Lower(self.node_list[max_node_id-1].datetime, self.node_list[max_node_id].datetime, seekMax=True)
-                cur_macd_lower = self.__getMACD_Sum_Lower(self.node_list[end_node_id-1].datetime, self.node_list[end_node_id].datetime, seekMax=True)               
-                if abs(cur_macd) < abs(pre_macd) or  abs(cur_macd_lower) < abs(pre_macd_lower) :
-                    if self.freq=='30MIN':
-                        a=1
-                    self.beichi_pc_list.append(BeichiTime(self.node_list[end_node_id].datetime,2, end_node_id,\
-                                                       real_time=self.__get_lowest_current_time("5MIN")))
-                          
-                    return True
-        return False
 
     def getBeichi_LastOne_Step(self):
         '''
         分步获取背驰节点
         返回当前中枢新加入节点是否为背驰点
+        调用时机：
+        新的正式节点加入中枢，并未更新此中枢的极值信息
         '''
         
         if(len(self.centralbase_list)<2):
             return False
         
-        if self.node_list[-1].isformal != M_FORMAL:
-            return False
-        
-        if len(self.beichi_list)>0 and self.beichi_list[-1].time == self.node_list[-1].datetime:
-            return False        
-        
-
-                
-        if self.freq=='30MIN' :
-            a=1
-        
         pre_base = self.centralbase_list[-2]
         base = self.centralbase_list[-1]
         
-        cur_macd = 0
-        pre_macd = 0
-        if(base.ctype<=-2):
-            if self.node_list[-1].value <= self.cur_min_value:#创新低
-                pre_macd = self.__getMACD_Sum(self.node_list[self.cur_min_node_id-1].datetime, self.node_list[self.cur_min_node_id].datetime, seekMax=False)
-                cur_macd = self.__getMACD_Sum(self.node_list[-2].datetime, self.node_list[-1].datetime, seekMax=False)
-                
-                pre_vol = self.__getVolumn_Sum(self.node_list[self.cur_min_node_id-1].datetime, self.node_list[self.cur_min_node_id].datetime, seekMax=False)
-                cur_vol = self.__getVolumn_Sum(self.node_list[-2].datetime, self.node_list[-1].datetime, seekMax=False)
-                                      
-                if (abs(cur_macd) < abs(pre_macd)) or (abs(cur_vol)<abs(pre_vol)):
-                    self.beichi_list.append(BeichiTime(self.node_list[-1].datetime, base.ctype,  len(self.node_list)-1,\
-                                               real_time=self.__get_lowest_current_time("5MIN")))
-                    self.first_buy_point_list.append(BuyPoint(self.node_list[-1].datetime, len(self.node_list)-1,\
-                                                       real_time=self.__get_lowest_current_time("5MIN")))                            
-                    return True                     
-        elif (base.ctype>=2):
-            if self.node_list[-1].value >= self.cur_max_value:#创新高
-                pre_macd = self.__getMACD_Sum(self.node_list[self.cur_max_node_id-1].datetime, self.node_list[self.cur_max_node_id].datetime, seekMax=True)
-                cur_macd = self.__getMACD_Sum(self.node_list[-2].datetime, self.node_list[-1].datetime, seekMax=True)
-                      
-                if abs(cur_macd) < abs(pre_macd):
-                    self.beichi_list.append(BeichiTime(self.node_list[-1].datetime, base.ctype,  len(self.node_list)-1,\
-                                               real_time=self.__get_lowest_current_time("5MIN")))
-                    self.first_sell_point_list.append(SellPoint(self.node_list[-1].datetime, len(self.node_list)-1,\
-                                                       real_time=self.__get_lowest_current_time("5MIN")))                                                     
-                    return True                       
-        else:
+        if (self.cur_min_node_id == len(self.node_list)-2) \
+           or (self.cur_max_node_id == len(self.node_list)-2):
             return self.beichi_processing
+    
+        
+        if base.ctype==0 or pre_base.ctype*base.ctype<0:
+            self.cur_max_node_id = base.max_node_id
+            self.cur_max_value = base.max_val
+            self.cur_min_node_id = base.min_node_id
+            self.cur_min_value = base.min_val
+        else:
+            if (self.low_CB_set==None):
+                cur_macd = 0
+                pre_macd = 0
+                base = self.centralbase_list[-1]
+                if(base.ctype<=-2):
+                    if self.node_list[-2].value <= self.cur_min_value:#创新低
+                        pre_macd = self.__getMACD_Sum(self.node_list[self.cur_min_node_id-1].datetime, self.node_list[self.cur_min_node_id ].datetime, seekMax=False)
+                        cur_macd = self.__getMACD_Sum(self.node_list[-3].datetime, self.node_list[-2].datetime, seekMax=False)
+                        self.cur_min_node_id = len(self.node_list)-2
+                        self.cur_min_value = self.node_list[-2].value
+                        if abs(cur_macd) < abs(pre_macd):
+                            self.beichi_list.append(BeichiTime(self.node_list[-2].datetime,base.ctype, len(self.node_list)-2,\
+                                                               real_time=self.__get_lowest_current_time("5MIN")))
+                            self.first_buy_point_list.append(BuyPoint(self.node_list[-2].datetime,len(self.node_list)-2,\
+                                                               real_time=self.__get_lowest_current_time("5MIN")))                            
+                            return True                        
+                elif (base.ctype>=2):
+                    if self.node_list[-2].value >= self.cur_max_value:#创新高
+                        pre_macd = self.__getMACD_Sum(self.node_list[self.cur_max_node_id-1].datetime, self.node_list[self.cur_max_node_id].datetime, seekMax=True)
+                        cur_macd = self.__getMACD_Sum(self.node_list[-3].datetime, self.node_list[-2].datetime, seekMax=True)
+                        self.cur_max_node_id = len(self.node_list)-2
+                        self.cur_max_value = self.node_list[-2].value 
+                        if abs(cur_macd) < abs(pre_macd):
+                            self.beichi_list.append(BeichiTime(self.node_list[-2].datetime,base.ctype, len(self.node_list)-2,\
+                                                               real_time=self.__get_lowest_current_time("5MIN")))
+                            self.first_sell_point_list.append(SellPoint(self.node_list[-2].datetime,  len(self.node_list)-2,\
+                                                               real_time=self.__get_lowest_current_time("5MIN")))                             
+                            return True                         
+                else:
+                    return self.beichi_processing
+                
+            else:
+                cur_macd = 0
+                pre_macd = 0
+                base = self.centralbase_list[-1]
+                if(base.ctype<=-2):
+                    if self.node_list[-2].value <= self.cur_min_value:#创新低
+                        pre_macd = self.__getMACD_Sum(self.node_list[self.cur_min_node_id-1].datetime, self.node_list[self.cur_min_node_id].datetime, seekMax=False)
+                        cur_macd = self.__getMACD_Sum(self.node_list[-3].datetime, self.node_list[-2].datetime, seekMax=False)
+                        
+                        pre_vol = self.__getVolumn_Sum(self.node_list[self.cur_min_node_id-1].datetime, self.node_list[self.cur_min_node_id].datetime, seekMax=False)
+                        cur_vol = self.__getVolumn_Sum(self.node_list[-3].datetime, self.node_list[-2].datetime, seekMax=False)
+                        
+                        self.cur_min_node_id = len(self.node_list)-2
+                        self.cur_min_value = self.node_list[-2].value                         
+                        #if (abs(cur_macd) < abs(pre_macd)) or (abs(cur_vol)<abs(pre_vol)):
+                            #self.beichi_list.append(BeichiTime(self.node_list[-2].datetime, base.ctype,  len(self.node_list)-2,\
+                                                       #real_time=self.__get_lowest_current_time("5MIN")))
+                            #self.first_buy_point_list.append(BuyPoint(self.node_list[-2].datetime, len(self.node_list)-2,\
+                                                               #real_time=self.__get_lowest_current_time("5MIN")))                            
+                            #return True                     
+                elif (base.ctype>=2):
+                    if self.node_list[-2].value >= self.cur_max_value:#创新高
+                        pre_macd = self.__getMACD_Sum(self.node_list[self.cur_max_node_id-1].datetime, self.node_list[self.cur_max_node_id].datetime, seekMax=True)
+                        cur_macd = self.__getMACD_Sum(self.node_list[-3].datetime, self.node_list[-2].datetime, seekMax=True)
+                        self.cur_max_node_id = len(self.node_list)-2
+                        self.cur_max_value = self.node_list[-2].value                        
+                        #if abs(cur_macd) < abs(pre_macd):
+                            #self.beichi_list.append(BeichiTime(self.node_list[-2].datetime, base.ctype,  len(self.node_list)-2,\
+                                                       #real_time=self.__get_lowest_current_time("5MIN")))
+                            #self.first_sell_point_list.append(SellPoint(self.node_list[-2].datetime, len(self.node_list)-2,\
+                                                               #real_time=self.__get_lowest_current_time("5MIN")))                                                     
+                            #return True                       
+                else:
+                    return self.beichi_processing
                     
         return self.beichi_processing
 
-    def getBeichi_Share_With_LowBeichi_Step(self):
-        if self.low_CB_set==None:
-            return
-        
-        if len(self.centralbase_list)<1:
-            return
-        
-        if len(self.share_beichi_list)>0 and self.share_beichi_list[-1].time == self.low_CB_set.node_list[-2].datetime:
-            return
-        
-        
-        base = self.centralbase_list[-1]
-        low_node_time, low_node_value = self.__share_same_beichi_with_low_judge()
-        if low_node_time!=None and low_node_value!=None :
-            self.share_beichi_list.append(BeichiTime(low_node_time, base.ctype,  len(self.node_list)-1,\
-                                               real_time=self.__get_lowest_current_time("5MIN")))
-        
-        
+            
 
     def beichi_judge_step(self):
         for beichi in self.beichi_list:
@@ -967,7 +875,9 @@ class CentralBaseSet:
                     if beichi.btype >0 and self.node_list[beichi.node_id].value>=self.node_list[-2].value: #顶背驰判断
                         beichi.real_beichi = M_TRUE
                     elif beichi.btype <0 and self.node_list[beichi.node_id].value<=self.node_list[-2].value: #低背驰判断
-                        beichi.real_beichi = M_TRUE                       
+                        beichi.real_beichi = M_TRUE
+                        self.sec_buy_point_list.append(BuyPoint(self.node_list[-2].datetime, len(self.node_list)-2,\
+                                                           real_time=self.__get_lowest_current_time("5MIN")))                        
                     else:
                         beichi.real_beichi = M_FALSE   
             
@@ -996,52 +906,24 @@ class CentralBaseSet:
                                                    real_time=self.__get_lowest_current_time("5MIN")))          
         
     def __getMACD_Sum(self, start_time, end_time, seekMax=True):
-        data_seg = self.data.ix[(self.data.index>=start_time) & (self.data.index<=end_time) & (self.data.index <= self.cur_time_index), 'MACD']
-        if seekMax:
-            data_seg = data_seg[data_seg>0]
-        else:
-            data_seg = data_seg[data_seg<0]
-        #return data_seg.sum()
-        if data_seg.empty:
-            return 0
-        else:
-            return data_seg.mean()
-    
-    def __getMACD_Sum_Lower(self, start_time, end_time, seekMax=True):
         if self.low_CB_set!= None:
             data_seg = self.low_CB_set.data.ix[(self.low_CB_set.data.index>=start_time) & (self.low_CB_set.data.index<=end_time) & (self.low_CB_set.data.index <= self.low_CB_set.cur_time_index), 'MACD']
         else:
             data_seg = self.data.ix[(self.data.index>=start_time) & (self.data.index<=end_time) & (self.data.index <= self.cur_time_index), 'MACD']
+        #data_seg = self.data.ix[(self.data.index>=start_time) & (self.data.index<=end_time) & (self.data.index <= self.cur_time_index), 'MACD']
         if seekMax:
             data_seg = data_seg[data_seg>0]
         else:
             data_seg = data_seg[data_seg<0]
-        #return data_seg.sum()
-        if data_seg.empty:
-            return 0
-        else:
-            return data_seg.mean()   
+        return data_seg.sum()
     
     def __getVolumn_Sum(self, start_time, end_time, seekMax=True):
-        data_seg = self.data.ix[(self.data.index>=start_time) & (self.data.index<=end_time) & (self.data.index <= self.cur_time_index), 'volume']
-
-        #return data_seg.sum()
-        if data_seg.empty:
-            return 0
-        else:
-            return data_seg.mean()
-    
-    def __getVolumn_Sum_Lower(self, start_time, end_time, seekMax=True):
         if self.low_CB_set!= None:
             data_seg = self.low_CB_set.data.ix[(self.low_CB_set.data.index>=start_time) & (self.low_CB_set.data.index<=end_time) & (self.low_CB_set.data.index <= self.low_CB_set.cur_time_index), 'volume']
         else:
             data_seg = self.data.ix[(self.data.index>=start_time) & (self.data.index<=end_time) & (self.data.index <= self.cur_time_index), 'volume']
 
-        #return data_seg.sum()
-        if data_seg.empty:
-            return 0
-        else:
-            return data_seg.mean()  
+        return data_seg.sum()    
          
     def __get_CB_pos(self, first, second):
         """
@@ -1165,189 +1047,7 @@ class CentralBaseSet:
             else:
                 return(-1*r_pos)         
         
-    def __share_same_beichi_with_low_judge(self):
-        if self.low_CB_set!=None:
-            low_beichi_list = self.low_CB_set.beichi_list
-            low_node_list = self.low_CB_set.node_list
-            if len(low_beichi_list)<=0 \
-               or len(low_node_list)<2 \
-               or len(self.centralbase_list)<=0:
-                return (None, None)
-            
-            if self.freq=='30MIN' :
-                if abs(low_node_list[-2].value-36)<0.001:
-                    a=1
-                    
-            if self.freq in GRANDPA_CB_LEVER:
-                if low_node_list[-1].isformal == M_TRUE:
-                    low_node_time = low_node_list[-1].datetime
-                    low_node_value = low_node_list[-1].value 
-                else:
-                    return (None, None)                
-            else:
-                low_node_time = low_node_list[-2].datetime
-                low_node_value = low_node_list[-2].value                
-            
-            if (low_beichi_list[-1].time == low_node_time):
-                if self.freq=='D' :
-                    a=1
-                base = self.centralbase_list[-1]
-                if(base.ctype<=-2):
-                    if low_node_value < self.cur_min_value:#创新低
-                        pre_macd = self.__getMACD_Sum(self.node_list[self.cur_min_node_id-1].datetime, self.node_list[self.cur_min_node_id].datetime, seekMax=False)
-                        cur_macd = self.__getMACD_Sum(self.node_list[-2].datetime, low_node_time, seekMax=False)
-                        pre_macd_lower = self.__getMACD_Sum_Lower(self.node_list[self.cur_min_node_id-1].datetime, self.node_list[self.cur_min_node_id ].datetime, seekMax=False)
-                        cur_macd_lower = self.__getMACD_Sum_Lower(self.node_list[-2].datetime, low_node_time, seekMax=False)                          
-                        pre_vol = self.__getVolumn_Sum(self.node_list[self.cur_min_node_id-1].datetime, self.node_list[self.cur_min_node_id].datetime, seekMax=False)
-                        cur_vol = self.__getVolumn_Sum(self.node_list[-2].datetime, low_node_time, seekMax=False)
-                                               
-                        if (abs(cur_macd) < abs(pre_macd)) or (abs(cur_macd_lower)<abs(pre_macd_lower)):
-                            return (low_node_time, low_node_value)
                             
-                elif (base.ctype>=2):
-                    if low_node_value > self.cur_max_value:#创新高
-                        pre_macd = self.__getMACD_Sum(self.node_list[self.cur_max_node_id-1].datetime, self.node_list[self.cur_max_node_id].datetime, seekMax=True)
-                        cur_macd = self.__getMACD_Sum(self.node_list[-2].datetime, low_node_time, seekMax=True)
-                        pre_macd_lower = self.__getMACD_Sum_Lower(self.node_list[self.cur_max_node_id-1].datetime, self.node_list[self.cur_max_node_id].datetime, seekMax=True)
-                        cur_macd_lower = self.__getMACD_Sum_Lower(self.node_list[-2].datetime, low_node_time, seekMax=True)                      
-                        if abs(cur_macd) < abs(pre_macd) or abs(cur_macd_lower)<abs(pre_macd_lower):
-                            return (low_node_time, low_node_value)
-                else:
-                    return (None, None)
-            
-        return (None, None)          
+                        
 
-    def SnakeTrade_step(self):
-        '''
-        贪吃蛇策略
-        '''
-        if len(self.node_list)<=2 or len(self.beichi_list)<=0:
-            return
-        
-        if len(self.trade_strategy_list)>0 \
-           and self.trade_strategy_list[-1].trade_point_list[-1].node_id ==len(self.node_list)-2:
-            return
-        
-        if (self.node_list[-2].datetime == self.beichi_list[-1].time) and self.beichi_list[-1].btype<0: #底背驰
-            if len(self.trade_strategy_list)>0:
-                self.trade_strategy_list[-1].trade_on_going = False
-                
-            self.trade_strategy_list.append(TradeStrategy())
-            self.trade_strategy_list[-1].trade_point_list.append(\
-                TradePoint(time =self.beichi_list[-1].time, 
-                node_id = self.beichi_list[-1].node_id, 
-                real_time = self.beichi_list[-1].real_time, 
-                trade_direct = M_BUY))
-            self.trade_strategy_list[-1].trade_on_going = True
-        elif(self.node_list[-2].ntype == M_TOP and len(self.trade_strategy_list)>0 and self.trade_strategy_list[-1].trade_on_going):
-            self.trade_strategy_list[-1].trade_point_list.append(TradePoint(time =self.node_list[-2].datetime,  \
-                                                                            node_id = len(self.node_list)-2, \
-                                                                            real_time=self.__get_lowest_current_time("5MIN"), \
-                                                                            trade_direct = M_SELL))
-        elif(self.node_list[-2].ntype == M_BOTTOM  and len(self.trade_strategy_list)>0 and self.trade_strategy_list[-1].trade_on_going):
-            if len(self.trade_strategy_list[-1].trade_point_list)==2:
-                if self.node_list[-2].value > self.node_list[self.trade_strategy_list[-1].trade_point_list[-2].node_id].value:
-                    self.trade_strategy_list[-1].trade_point_list.append(TradePoint(time =self.node_list[-2].datetime,  \
-                                                                                    node_id = len(self.node_list)-2, \
-                                                                                    real_time=self.__get_lowest_current_time("5MIN"), \
-                                                                                    trade_direct = M_BUY))
-                else:
-                    self.trade_strategy_list[-1].trade_on_going = False
-            elif (self.centralbase_list[-1].end_node_id - self.centralbase_list[-1].start_node_id)==1 and self.centralbase_list[-1].ctype>=2:
-                self.trade_strategy_list[-1].trade_point_list.append(TradePoint(time =self.node_list[-2].datetime,  \
-                                                                                node_id = len(self.node_list)-2, \
-                                                                                real_time=self.__get_lowest_current_time("5MIN"), \
-                                                                                trade_direct = M_BUY)) 
-            else:
-                self.trade_strategy_list[-1].trade_on_going = False
-                
-                
-    def SnakeTrade_With_ShareBeichi_step(self):
-        '''
-        贪吃蛇策略,使用共享背驰点
-        '''
-        if self.low_CB_set==None:
-            return
-        
-        if len(self.node_list)<=2 or len(self.share_beichi_list)<=0:
-            return
-        
-        
-        if (self.low_CB_set.beichi_list[-1].time == self.share_beichi_list[-1].time) \
-           and self.low_CB_set.beichi_list[-1].time == self.low_CB_set.share_beichi_list[-1].time \
-           and self.share_beichi_list[-1].btype<0: #底背驰
-            
-            if len(self.trade_strategy_list)<=0 or (not self.trade_strategy_list[-1].trade_on_going):    
-                self.trade_strategy_list.append(TradeStrategy())
-                self.trade_strategy_list[-1].trade_point_list.append(\
-                    TradePoint(time =self.share_beichi_list[-1].time, 
-                    node_id = self.share_beichi_list[-1].node_id,
-                    low_cb_id=self.node_list[-1].low_id,
-                    real_time = self.__get_lowest_current_time("5MIN"), 
-                    trade_direct = M_BUY))
-                self.trade_strategy_list[-1].trade_on_going = True
-            
-        if len(self.beichi_list)>0 and self.beichi_list[-1].time == self.share_beichi_list[-1].time\
-           and self.share_beichi_list[-1].btype<0: #底背驰
-            if len(self.trade_strategy_list)<=0 or (not self.trade_strategy_list[-1].trade_on_going):
-                self.trade_strategy_list.append(TradeStrategy())
-                self.trade_strategy_list[-1].trade_point_list.append(\
-                    TradePoint(time =self.share_beichi_list[-1].time, 
-                    node_id = self.share_beichi_list[-1].node_id,
-                    low_cb_id=self.node_list[-1].low_id,
-                    real_time = self.__get_lowest_current_time("5MIN"), 
-                    trade_direct = M_BUY))
-                self.trade_strategy_list[-1].trade_on_going = True            
-            
-        #中枢不成立
-        if len(self.trade_strategy_list)>0 and self.trade_strategy_list[-1].trade_on_going:
-            buy_node_id = self.trade_strategy_list[-1].trade_point_list[-1].node_id
-            if len(self.node_list)-1 == buy_node_id+2:
-                pre_base = self.low_CB_set.centralbase_list[-2]
-                base = self.low_CB_set.centralbase_list[-1]
-                if (base.ctype<pre_base.ctype) and self.low_CB_set.node_list[base.start_node_id].value<self.node_list[buy_node_id].value:
-                    self.trade_strategy_list[-1].trade_point_list.append(TradePoint(time =self.node_list[-1].datetime,  \
-                                                                                    node_id = len(self.node_list)-1, \
-                                                                                    low_cb_id= self.node_list[-1].low_id,\
-                                                                                    real_time=self.__get_lowest_current_time("5MIN"), \
-                                                                                    trade_direct = M_SELL))  
-                    self.trade_strategy_list[-1].trade_on_going = False
-        
-        #次级别共顶背驰
-        if len(self.trade_strategy_list)>0 and self.trade_strategy_list[-1].trade_on_going:
-            if (self.low_CB_set.beichi_list[-1].time == self.low_CB_set.share_beichi_list[-1].time) \
-               and self.low_CB_set.share_beichi_list[-1].btype>0: 
-                self.trade_strategy_list[-1].trade_point_list.append(TradePoint(time =self.node_list[-1].datetime,  \
-                                                                                node_id = len(self.node_list)-1, \
-                                                                                low_cb_id= self.node_list[-1].low_id,\
-                                                                                real_time=self.__get_lowest_current_time("5MIN"), \
-                                                                                trade_direct = M_SELL))  
-                self.trade_strategy_list[-1].trade_on_going = False 
-                
-        #本级别顶背驰
-        if len(self.trade_strategy_list)>0 and self.trade_strategy_list[-1].trade_on_going:
-            if (self.share_beichi_list[-1].btype>0):
-                self.trade_strategy_list[-1].trade_point_list.append(TradePoint(time =self.node_list[-1].datetime,  \
-                                                                                node_id = len(self.node_list)-1, \
-                                                                                low_cb_id= self.node_list[-1].low_id,\
-                                                                                real_time=self.__get_lowest_current_time("5MIN"), \
-                                                                                trade_direct = M_SELL))  
-                self.trade_strategy_list[-1].trade_on_going = False                
-        
-            
-        #本级别趋势改变
-        if len(self.trade_strategy_list)>0 and self.trade_strategy_list[-1].trade_on_going:
-            buy_node_id = self.trade_strategy_list[-1].trade_point_list[-1].node_id
-            if (self.centralbase_list[-1].start_node_id > buy_node_id) and self.centralbase_list[-1].ctype<0:
-                self.trade_strategy_list[-1].trade_point_list.append(TradePoint(time =self.node_list[-1].datetime,  \
-                                                                                node_id = len(self.node_list)-1, \
-                                                                                low_cb_id= self.node_list[-1].low_id,\
-                                                                                real_time=self.__get_lowest_current_time("5MIN"), \
-                                                                                trade_direct = M_SELL))  
-                self.trade_strategy_list[-1].trade_on_going = False         
-            
-            
-        
-
-        
             

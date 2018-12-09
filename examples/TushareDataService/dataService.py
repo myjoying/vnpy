@@ -61,7 +61,9 @@ def generateVtBar(row):
     bar.low = row['low']
     bar.close = row['close']
     bar.volume = row['vol']
+    #bar.volume = row['volume']
     bar.datetime = row.name
+    #bar.datetime = datetime.strptime(row.date,"%Y-%m-%d %H:%M")
     bar.date = bar.datetime.strftime("%Y%m%d")
     bar.time = bar.datetime.strftime("%H:%M:%S")
     
@@ -72,7 +74,11 @@ def downBarBySymbol(symbol, start_date=None, end_date=None, freq='D'):
     """下载某一合约的分钟线数据"""
     start = time()
     
-    db = mc[DB_NAME_DICT[freq]]                         # 数据库
+    db_freq = freq
+    #if freq[0] in ['0', '1', '2','3','4','5','6','7','8','9']:
+        #db_freq = freq + 'MIN'
+    
+    db = mc[DB_NAME_DICT[db_freq]]                         # 数据库
     cl = db[symbol]
     cl.ensure_index([('datetime', ASCENDING)], unique=True)         # 添加索引
 
@@ -82,8 +88,9 @@ def downBarBySymbol(symbol, start_date=None, end_date=None, freq='D'):
     else:
         asset = 'E'
         
-    df = ts.bar(symbol, conn=ts.get_apis(), freq=freq, asset=asset, start_date=start_date, end_date=end_date)
-    ts.get_hist_data()
+    asset = 'INDEX'    
+    df = ts.bar(symbol, conn=ts.get_apis(), freq=freq, asset=asset, start_date=start_date, end_date=end_date, adj='qfq')
+    #df = ts.get_hist_data(symbol,start=start_date, end=end_date, ktype=freq)
     
     df = df.sort_index()
     
@@ -109,6 +116,8 @@ def downloadBarData():
     # 添加下载任务
     start_date = datetime.strptime(START, "%Y-%m-%d")
     end_date = datetime.strptime(END, "%Y-%m-%d")
+    #start_date = START
+    #end_date = END
     for symbol in SYMBOLS:
         for freq in FREQS:
             downBarBySymbol(str(symbol), start_date, end_date, freq)

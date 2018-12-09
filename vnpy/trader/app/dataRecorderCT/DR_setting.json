@@ -1,0 +1,22 @@
+{
+    "working": true,
+
+    "tick":
+    [
+        ["002230", "Tushare"],
+        ["300467", "Tushare"]
+    ],
+
+    "bar":
+    [   
+        ["002230", "Tushare"],
+        ["300467", "Tushare"]
+        
+    ],
+    "bar_min":
+    ["5", "30"],
+
+    "active":
+    {
+    }
+}

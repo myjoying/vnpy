@@ -349,11 +349,21 @@ class BarGenerator(object):
         self.bar = None             # 1分钟K线对象
         self.onBar = onBar          # 1分钟K线回调函数
         
-        self.xminBar = None         # X分钟K线对象
-        self.xmin = xmin            # X的值
-        self.onXminBar = onXminBar  # X分钟K线的回调函数
+        #self.xminBar = None         # X分钟K线对象
+        #self.xmin = xmin            # X的值
+        #self.onXminBar = onXminBar  # X分钟K线的回调函数
+        
+        self.xminBar_dict = {}      #X分钟处理对象所需要的字典（X分钟K线对象，X的值，X分钟K线的回调函数 ）
+        if xmin > 0:
+            self.xminBar_dict[str(xmin)] = (None, xmin, onXminBar)
+
         
         self.lastTick = None        # 上一TICK缓存对象
+        
+    #----------------------------------------------------------------------
+    def addXminBarGenerator(self, xmin, onXminBar):
+        if xmin > 0:
+            self.xminBar_dict[str(xmin)] = (None, xmin, onXminBar)        
         
     #----------------------------------------------------------------------
     def updateTick(self, tick):
@@ -406,6 +416,50 @@ class BarGenerator(object):
     #----------------------------------------------------------------------
     def updateBar(self, bar):
         """1分钟K线更新"""
+        for xminkey in self.xminBar_dict.keys():
+            xminBar = self.xminBar_dict[xminkey][0]    # X分钟K线对象
+            xmin = self.xminBar_dict[xminkey][1]       # X的值
+            onXminBar = self.xminBar_dict[xminkey][2]  # X分钟K线的回调函数
+            
+            # 尚未创建对象
+            if not self.xminBar:
+                xminBar = VtBarData()
+                
+                xminBar.vtSymbol = bar.vtSymbol
+                xminBar.symbol = bar.symbol
+                xminBar.exchange = bar.exchange
+            
+                xminBar.open = bar.open
+                xminBar.high = bar.high
+                xminBar.low = bar.low            
+                
+                xminBar.datetime = bar.datetime    # 以第一根分钟K线的开始时间戳作为X分钟线的时间戳
+            # 累加老K线
+            else:
+                xminBar.high = max(xminBar.high, bar.high)
+                xminBar.low = min(xminBar.low, bar.low)
+        
+            # 通用部分
+            xminBar.close = bar.close        
+            xminBar.openInterest = bar.openInterest
+            xminBar.volume += int(bar.volume)                
+                
+            # X分钟已经走完
+            if not (bar.datetime.minute + 1) % xmin:   # 可以用X整除
+                # 生成上一X分钟K线的时间戳
+                xminBar.datetime = xminBar.datetime.replace(second=0, microsecond=0)  # 将秒和微秒设为0
+                xminBar.date = xminBar.datetime.strftime('%Y%m%d')
+                xminBar.time = xminBar.datetime.strftime('%H:%M:%S.%f')
+                
+                # 推送
+                onXminBar(xminBar)
+                
+                # 清空老K线缓存对象
+                xminBar = None            
+            
+            self.xminBar_dict[xminkey][0] = xminBar
+            
+        '''
         # 尚未创建对象
         if not self.xminBar:
             self.xminBar = VtBarData()
@@ -441,7 +495,7 @@ class BarGenerator(object):
             
             # 清空老K线缓存对象
             self.xminBar = None
-
+        '''
 
 ########################################################################
 class ArrayManager(object):

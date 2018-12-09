@@ -6,7 +6,7 @@ from pymongo import MongoClient
 import pandas as pd
 
 from vnpy.trader.app.ctaStrategy.ctaBase import DATABASE_NAMES
-from CentralBase import centralbase
+
 
 # 加载配置
 config = open('config.json')

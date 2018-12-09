@@ -408,6 +408,14 @@ class CtaEngine(object):
     #----------------------------------------------------------------------
     def subscribeMarketData(self, strategy):
         """订阅行情"""
+        
+
+        for gateway in self.mainEngine.gatewayDict.keys():
+            req = VtSubscribeReq()
+            req.symbol = strategy.vtSymbol            
+            self.mainEngine.subscribe(req, gateway)
+        
+        '''
         # 订阅合约
         contract = self.mainEngine.getContract(strategy.vtSymbol)
         if contract:
@@ -421,7 +429,9 @@ class CtaEngine(object):
             
             self.mainEngine.subscribe(req, contract.gatewayName)
         else:
-            self.writeCtaLog(u'%s的交易合约%s无法找到' %(strategy.name, strategy.vtSymbol))
+            self.writeCtaLog(u'%s的交易合约%s无法找到' %(strategy.name, strategy.vtSymbol))   
+        '''
+
 
     #----------------------------------------------------------------------
     def initStrategy(self, name):
